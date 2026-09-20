@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS depuis photo — extracteur EXIF pour Wayfarer</title>
+<meta name="description" content="Extrait les coordonnées GPS des métadonnées EXIF d'une photo à partir de son URL. Outil pratique pour vérifier les propositions Niantic Wayfarer.">
+
+<!-- Leaflet (carte + tuiles OpenStreetMap) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<!-- exifr (lecture EXIF côté navigateur) -->
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <h1>📍 GPS depuis photo</h1>
+  <p class="subtitle">Colle l'URL d'une photo Wayfarer pour retrouver instantanément ses coordonnées GPS.</p>
+  <button id="settings-toggle" class="btn-icon" title="Paramètres" aria-label="Paramètres">⚙️</button>
+</header>
+
+<!-- Panneau Paramètres (proxy CORS) -->
+<dialog id="settings-panel">
+  <form method="dialog">
+    <h2>Paramètres</h2>
+    <label for="proxy-url">URL du proxy CORS (Cloudflare Worker), optionnel</label>
+    <input type="url" id="proxy-url" placeholder="https://mon-worker.mon-compte.workers.dev">
+    <p class="hint">Utilisé uniquement en dernier recours si le téléchargement direct échoue à cause du CORS. Voir <code>worker/cors-proxy.js</code> et le README pour le déployer gratuitement.</p>
+    <div class="settings-actions">
+      <button type="button" id="save-settings" class="btn-primary">Enregistrer</button>
+      <button type="button" id="close-settings" class="btn-secondary">Fermer</button>
+    </div>
+  </form>
+</dialog>
+
+<main>
+  <section class="input-section">
+    <label for="url-input" class="input-label">Colle une ou plusieurs URL de photo (une par ligne)</label>
+    <textarea id="url-input" rows="4" placeholder="https://lh3.googleusercontent.com/...&#10;https://lh3.googleusercontent.com/..."></textarea>
+    <div class="input-actions">
+      <button id="analyze-btn" class="btn-primary">Analyser</button>
+      <button id="clear-btn" class="btn-secondary">Effacer</button>
+      <span id="progress-info" class="progress-info" hidden></span>
+    </div>
+    <progress id="progress-bar" max="100" value="0" hidden></progress>
+  </section>
+
+  <section id="results" class="results-section" hidden>
+    <!-- Vue simple : une seule URL -->
+    <div id="single-result" hidden></div>
+
+    <!-- Vue multiple : tableau récapitulatif -->
+    <div id="multi-result" hidden>
+      <div class="multi-header">
+        <h2>Résultats (<span id="result-count">0</span>)</h2>
+        <button id="export-csv-btn" class="btn-secondary">⬇️ Exporter en CSV</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>Miniature</th>
+              <th>Statut</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th>Liens</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+      <div id="detail-panel" class="detail-panel" hidden></div>
+    </div>
+  </section>
+
+  <!-- Encart de secours : fichier local, masqué tant qu'aucun échec n'a eu lieu -->
+  <details id="local-file-fallback" class="local-fallback" hidden>
+    <summary>📁 Analyser un fichier local</summary>
+    <div class="local-fallback-content">
+      <p>Le téléchargement automatique a échoué. Tu peux glisser-déposer un fichier téléchargé manuellement ci-dessous.</p>
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="file-input" accept="image/*" multiple>
+        <p>Glisse une image ici ou clique pour choisir un fichier</p>
+      </div>
+      <div id="local-results"></div>
+    </div>
+  </details>
+</main>
+
+<footer class="site-footer">
+  <p>Données cartographiques &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">contributeurs OpenStreetMap</a> — Outil 100% statique, aucune donnée envoyée à un serveur (sauf téléchargement de l'image elle-même et, en secours, le proxy CORS configuré).</p>
+</footer>
+
+<!-- Template pour une carte de résultat (mode simple ou détail) -->
+<template id="result-card-template">
+  <article class="result-card">
+    <div class="card-map-wrapper">
+      <div class="card-map"></div>
+    </div>
+    <div class="card-body">
+      <div class="card-status"></div>
+      <div class="card-thumb-row">
+        <img class="card-thumb" alt="Miniature de la photo" hidden>
+        <div class="card-meta"></div>
+      </div>
+      <div class="card-links"></div>
+      <div class="card-coords"></div>
+    </div>
+  </article>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
