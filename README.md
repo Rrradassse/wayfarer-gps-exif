@@ -99,6 +99,10 @@ Wrangler minimal et copie `worker/cors-proxy.js` dedans).
 - L'outil ne fait aucune recherche d'image inversée ni de géolocalisation
   par reconnaissance visuelle : il lit uniquement les métadonnées EXIF déjà
   présentes dans le fichier.
+- Les **libellés de carte en français** dépendent du tag `name:fr` présent
+  ou non dans OpenStreetMap pour chaque lieu : bien renseigné dans la
+  plupart des pays, il peut manquer pour des lieux moins connus, auquel cas
+  l'outil retombe sur le nom anglais, puis latin, puis local.
 
 ## Structure du dépôt
 
@@ -112,7 +116,8 @@ worker/cors-proxy.js    Proxy CORS Cloudflare Worker (optionnel)
 ## Technologies utilisées (toutes gratuites, via CDN)
 
 - [exifr](https://github.com/MikeKovarik/exifr) — lecture des métadonnées EXIF côté navigateur.
-- [Leaflet](https://leafletjs.com/) + [OpenStreetMap](https://www.openstreetmap.org/) — carte et tuiles.
+- [Leaflet](https://leafletjs.com/) — conteneur de carte (zoom, marqueur, contrôles).
+- [MapLibre GL JS](https://maplibre.org/) + [OpenFreeMap](https://openfreemap.org/) — tuiles vectorielles (données [OpenStreetMap](https://www.openstreetmap.org/)), avec les libellés forcés en français quand la traduction existe.
 
 ## Licence
 

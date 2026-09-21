@@ -336,6 +336,46 @@ function clearActiveMaps() {
 }
 
 // ============================================================================
+// Fond de carte : tuiles vectorielles OpenFreeMap (gratuites, sans clé d'API)
+// avec les libellés forcés en français quand la traduction existe dans
+// OpenStreetMap (tag "name:fr"), au lieu de la langue locale par défaut.
+// ============================================================================
+
+const OPENFREEMAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const MAP_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> — tuiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>';
+
+// Remplace, dans chaque calque de libellés, l'expression d'origine par une
+// priorité : nom français > nom anglais > nom en alphabet latin > nom local.
+function preferFrenchLabels(style) {
+  const frenchFirst = ['coalesce', ['get', 'name:fr'], ['get', 'name_en'], ['get', 'name:latin'], ['get', 'name']];
+  (style.layers || []).forEach((layer) => {
+    const textField = layer.layout && layer.layout['text-field'];
+    // On ne touche qu'aux calques dont le libellé dépend bien d'un nom de lieu
+    // (on laisse intacts les numéros de rue, les références d'autoroute, etc.)
+    if (textField && JSON.stringify(textField).includes('"name')) {
+      layer.layout['text-field'] = frenchFirst;
+    }
+  });
+  return style;
+}
+
+// Le style est récupéré et adapté une seule fois, puis réutilisé pour toutes
+// les cartes affichées pendant la session.
+let mapStylePromise = null;
+function getMapStyle() {
+  if (!mapStylePromise) {
+    mapStylePromise = fetch(OPENFREEMAP_STYLE_URL)
+      .then((res) => res.json())
+      .then(preferFrenchLabels)
+      // En cas d'échec (hors ligne, service indisponible...), on retombe sur
+      // l'URL du style brut : la carte reste fonctionnelle, juste en langue locale.
+      .catch(() => OPENFREEMAP_STYLE_URL);
+  }
+  return mapStylePromise;
+}
+
+// ============================================================================
 // Construction d'une carte de résultat (mode simple ou détail du tableau)
 // ============================================================================
 
@@ -412,11 +452,10 @@ function createResultCard(result) {
     // La carte doit être initialisée une fois l'élément inséré dans le DOM
     // (Leaflet a besoin de connaître les dimensions réelles du conteneur).
     requestAnimationFrame(() => {
-      const map = L.map(mapEl).setView([result.lat, result.lng], 17);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-      }).addTo(map);
+      const map = L.map(mapEl, { maxZoom: 19 }).setView([result.lat, result.lng], 17);
+      getMapStyle().then((style) => {
+        L.maplibreGL({ style, attribution: MAP_ATTRIBUTION }).addTo(map);
+      });
       L.marker([result.lat, result.lng]).addTo(map);
       activeMaps.push(map);
       setTimeout(() => map.invalidateSize(), 50);
