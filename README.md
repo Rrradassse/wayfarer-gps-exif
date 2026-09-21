@@ -13,7 +13,7 @@ HTML/CSS/JS vanilla, hébergeable gratuitement sur GitHub Pages.
 
 1. Dans Wayfarer, **clic droit sur la photo** de la proposition → **« Copier
    l'adresse de l'image »**.
-2. Colle l'URL dans le grand champ de texte de l'outil (`Ctrl+V`).
+2. Colle l'URL dans le grand champ de texte de l'outil (`Ctrl+V`). (url de l'outil : https://rrradassse.github.io/wayfarer-gps-exif/ ) 
 3. L'analyse démarre automatiquement au collage (ou clique sur
    « Analyser »). En quelques secondes, tu obtiens :
    - une mini-carte avec un marqueur sur la position ;
