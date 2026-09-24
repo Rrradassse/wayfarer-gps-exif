@@ -412,42 +412,36 @@ button {
 
 .detail-panel { margin-top: 1rem; }
 
-/* ===== Fallback fichier local ===== */
-.local-fallback {
-  margin-top: 1.5rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-}
+/* ===== Photos de l'ordinateur (dossier / fichiers) ===== */
+.local-section { margin-top: 1rem; }
 
-.local-fallback summary {
-  cursor: pointer;
-  font-weight: 600;
+.local-section h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
 }
-
-.local-fallback-content { margin-top: 1rem; }
 
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  padding: 2rem;
+  padding: 1.25rem;
   text-align: center;
   color: var(--text-muted);
-  position: relative;
-  cursor: pointer;
 }
+
+.dropzone p { margin: 0 0 0.8rem; }
+
+.dropzone .input-actions { justify-content: center; margin-top: 0; }
 
 .dropzone.dragover {
   border-color: var(--primary);
   background: var(--bg);
 }
 
-.dropzone input[type="file"] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+.name-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== Footer ===== */

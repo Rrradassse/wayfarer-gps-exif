@@ -56,6 +56,20 @@
     <progress id="progress-bar" max="100" value="0" hidden></progress>
   </section>
 
+  <!-- Photos de l'ordinateur : dossier entier ou fichiers, résultats affichés en dessous -->
+  <section class="input-section local-section">
+    <h2 class="input-label">📁 Ou analyse des photos de ton ordinateur</h2>
+    <div id="dropzone" class="dropzone">
+      <p>Glisse un dossier (ou des photos) ici</p>
+      <div class="input-actions">
+        <button type="button" id="pick-folder-btn" class="btn-primary">Choisir un dossier</button>
+        <button type="button" id="pick-files-btn" class="btn-secondary">Choisir des photos</button>
+      </div>
+    </div>
+    <input type="file" id="folder-input" webkitdirectory hidden>
+    <input type="file" id="file-input" accept="image/*" multiple hidden>
+  </section>
+
   <section id="results" class="results-section" hidden>
     <!-- Vue simple : une seule URL -->
     <div id="single-result" hidden></div>
@@ -71,6 +85,7 @@
           <thead>
             <tr>
               <th>Miniature</th>
+              <th>Nom</th>
               <th>Statut</th>
               <th>Latitude</th>
               <th>Longitude</th>
@@ -84,18 +99,6 @@
     </div>
   </section>
 
-  <!-- Encart de secours : fichier local, masqué tant qu'aucun échec n'a eu lieu -->
-  <details id="local-file-fallback" class="local-fallback" hidden>
-    <summary>📁 Analyser un fichier local</summary>
-    <div class="local-fallback-content">
-      <p>Le téléchargement automatique a échoué. Tu peux glisser-déposer un fichier téléchargé manuellement ci-dessous.</p>
-      <div id="dropzone" class="dropzone">
-        <input type="file" id="file-input" accept="image/*" multiple>
-        <p>Glisse une image ici ou clique pour choisir un fichier</p>
-      </div>
-      <div id="local-results"></div>
-    </div>
-  </details>
 </main>
 
 <footer class="site-footer">

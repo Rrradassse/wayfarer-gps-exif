@@ -27,10 +27,11 @@ const proxyUrlInput = document.getElementById('proxy-url');
 const saveSettingsBtn = document.getElementById('save-settings');
 const closeSettingsBtn = document.getElementById('close-settings');
 
-const localFallback = document.getElementById('local-file-fallback');
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
-const localResultsEl = document.getElementById('local-results');
+const folderInput = document.getElementById('folder-input');
+const pickFolderBtn = document.getElementById('pick-folder-btn');
+const pickFilesBtn = document.getElementById('pick-files-btn');
 
 const cardTemplate = document.getElementById('result-card-template');
 
@@ -148,7 +149,7 @@ function classifyError(dl, hasProxy) {
   if (dl.networkError) {
     return hasProxy
       ? "Échec du téléchargement même via le proxy CORS configuré. L'URL est peut-être invalide, expirée, ou l'image n'existe plus."
-      : "Échec du téléchargement, probablement à cause d'une restriction CORS. Configure un proxy dans les Paramètres (⚙️), ou utilise l'option « fichier local » ci-dessous.";
+      : "Échec du téléchargement, probablement à cause d'une restriction CORS. Configure un proxy dans les Paramètres (⚙️), ou télécharge la photo puis dépose-la dans la zone « photos de ton ordinateur » ci-dessous.";
   }
   return "Erreur inconnue lors du téléchargement.";
 }
@@ -257,8 +258,13 @@ async function analyzeUrl(originalUrl, proxyUrl) {
 }
 
 // ============================================================================
-// Analyse d'un fichier local (dernier recours)
+// Analyse d'un fichier local (photo d'un dossier ou sélectionnée à la main)
 // ============================================================================
+
+// Chemin lisible du fichier : sous-dossiers inclus quand on en dispose
+function fileLabel(file) {
+  return file.relPath || file.webkitRelativePath || file.name;
+}
 
 async function analyzeLocalFile(file) {
   try {
@@ -266,7 +272,7 @@ async function analyzeLocalFile(file) {
     const meta = await safeParseMeta(file);
     const thumbUrl = URL.createObjectURL(file);
     const base = {
-      url: file.name,
+      url: fileLabel(file),
       thumbUrl,
       dateTaken: formatDate(meta.DateTimeOriginal || meta.CreateDate || meta.ModifyDate),
       make: meta.Make,
@@ -277,7 +283,7 @@ async function analyzeLocalFile(file) {
     }
     return { ...base, status: 'nogps' };
   } catch (e) {
-    return { url: file.name, status: 'error', errorMessage: "Impossible de lire ce fichier." };
+    return { url: fileLabel(file), status: 'error', errorMessage: "Impossible de lire ce fichier." };
   }
 }
 
@@ -493,11 +499,14 @@ function renderTableSkeleton(results) {
     tr.dataset.id = r.id;
     tr.innerHTML = `
       <td></td>
+      <td class="name-cell"></td>
       <td><span class="badge status-loading">Analyse...</span></td>
       <td>—</td>
       <td>—</td>
       <td>—</td>
     `;
+    tr.children[1].textContent = r.url;
+    tr.children[1].title = r.url;
     tr.addEventListener('click', () => showDetail(r.id));
     tbody.appendChild(tr);
   });
@@ -509,7 +518,7 @@ function updateTableRow(result) {
   const cells = tr.children;
 
   cells[0].innerHTML = result.thumbUrl
-    ? `<img class="table-thumb" src="${result.thumbUrl}" alt="">`
+    ? `<img class="table-thumb" src="${result.thumbUrl}" alt="" loading="lazy" decoding="async">`
     : '';
 
   let badgeClass, badgeText;
@@ -523,15 +532,15 @@ function updateTableRow(result) {
     badgeClass = 'status-error';
     badgeText = '❌ Erreur';
   }
-  cells[1].innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
+  cells[2].innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
 
-  cells[2].textContent = result.status === 'ok' ? result.lat.toFixed(6) : '—';
-  cells[3].textContent = result.status === 'ok' ? result.lng.toFixed(6) : '—';
+  cells[3].textContent = result.status === 'ok' ? result.lat.toFixed(6) : '—';
+  cells[4].textContent = result.status === 'ok' ? result.lng.toFixed(6) : '—';
 
   if (result.status === 'ok') {
-    cells[4].innerHTML = `<a href="${buildGoogleMapsUrl(result.lat, result.lng)}" target="_blank" rel="noopener">Maps</a> · <a href="${buildStreetViewUrl(result.lat, result.lng)}" target="_blank" rel="noopener">SV</a>`;
+    cells[5].innerHTML = `<a href="${buildGoogleMapsUrl(result.lat, result.lng)}" target="_blank" rel="noopener">Maps</a> · <a href="${buildStreetViewUrl(result.lat, result.lng)}" target="_blank" rel="noopener">SV</a>`;
   } else {
-    cells[4].textContent = '—';
+    cells[5].textContent = '—';
   }
 
   // Si cette ligne est actuellement affichée dans le panneau de détail, on la rafraîchit
@@ -631,38 +640,46 @@ function runWithConcurrency(items, limit, worker, onEach) {
 }
 
 // ============================================================================
-// Point d'entrée : analyse de la liste d'URL collées
+// Analyse générique : une liste d'éléments (URL ou fichiers) traitée en
+// parallèle, avec affichage simple (1 élément) ou tableau (plusieurs).
 // ============================================================================
 
-async function analyze() {
-  const urls = urlInput.value.split('\n').map((s) => s.trim()).filter(Boolean);
-  if (urls.length === 0) return;
+// Libère les miniatures de l'analyse précédente (elles retiennent les images en mémoire)
+function releaseThumbnails() {
+  currentResults.forEach((r) => { if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl); });
+}
 
+async function runAnalysis(items, analyzeItem, concurrency) {
+  if (items.length === 0) return;
+
+  releaseThumbnails();
   clearActiveMaps();
   resultsSection.hidden = false;
-  singleResultEl.hidden = urls.length !== 1;
-  multiResultEl.hidden = urls.length === 1;
+  singleResultEl.hidden = items.length !== 1;
+  multiResultEl.hidden = items.length === 1;
   analyzeBtn.disabled = true;
   progressBar.hidden = false;
   progressInfo.hidden = false;
   progressBar.value = 0;
-  progressInfo.textContent = `0 / ${urls.length}`;
+  progressInfo.textContent = `0 / ${items.length}`;
 
-  currentResults = urls.map((u, i) => ({ id: i, url: u, status: 'loading' }));
+  currentResults = items.map((item, i) => ({
+    id: i,
+    url: typeof item === 'string' ? item : fileLabel(item),
+    status: 'loading',
+  }));
 
-  if (urls.length === 1) {
+  if (items.length === 1) {
     renderSingle(currentResults[0]);
   } else {
     renderTableSkeleton(currentResults);
   }
 
-  const proxyUrl = getProxyUrl();
-
   await runWithConcurrency(
-    urls,
-    CONCURRENCY,
-    async (url, i) => {
-      const result = await analyzeUrl(url, proxyUrl);
+    items,
+    concurrency,
+    async (item, i) => {
+      const result = await analyzeItem(item);
       result.id = i;
       currentResults[i] = result;
       return result;
@@ -671,11 +688,7 @@ async function analyze() {
       progressBar.value = Math.round((completed / total) * 100);
       progressInfo.textContent = `${completed} / ${total}`;
 
-      if (result.status === 'error') {
-        localFallback.hidden = false;
-      }
-
-      if (urls.length === 1) {
+      if (items.length === 1) {
         renderSingle(result);
       } else {
         updateTableRow(result);
@@ -686,6 +699,14 @@ async function analyze() {
   progressBar.hidden = true;
   progressInfo.hidden = true;
   analyzeBtn.disabled = false;
+  resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Point d'entrée principal : analyse des URL collées
+async function analyze() {
+  const urls = urlInput.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  const proxyUrl = getProxyUrl();
+  await runAnalysis(urls, (url) => analyzeUrl(url, proxyUrl), CONCURRENCY);
 
   // On redonne le focus (et on sélectionne le texte) pour enchaîner
   // rapidement : un simple collage remplace le contenu et relance l'analyse.
@@ -707,28 +728,73 @@ clearBtn.addEventListener('click', () => {
   singleResultEl.hidden = true;
   multiResultEl.hidden = true;
   clearActiveMaps();
+  releaseThumbnails();
   currentResults = [];
   urlInput.focus();
 });
 
 // ============================================================================
-// Repli "fichier local" (dernier recours, visible seulement après un échec)
+// Photos de l'ordinateur : dossier (sous-dossiers inclus) ou fichiers
 // ============================================================================
 
-async function handleLocalFiles(fileList) {
-  const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
-  if (!files.length) return;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|heic|heif|tiff?|webp|avif|dng)$/i;
 
-  for (const file of files) {
-    const placeholder = document.createElement('p');
-    placeholder.textContent = `Analyse de ${file.name}...`;
-    localResultsEl.appendChild(placeholder);
-
-    const result = await analyzeLocalFile(file);
-    const card = createResultCard(result);
-    localResultsEl.replaceChild(card, placeholder);
-  }
+function isImageFile(file) {
+  return file.type.startsWith('image/') || IMAGE_EXTENSIONS.test(file.name);
 }
+
+async function analyzeFiles(files) {
+  const images = files.filter(isImageFile);
+  if (!images.length) {
+    alert("Aucune image trouvée dans cette sélection.");
+    return;
+  }
+  // Tri par chemin pour retrouver l'ordre naturel du dossier
+  images.sort((a, b) => fileLabel(a).localeCompare(fileLabel(b), 'fr', { numeric: true }));
+  await runAnalysis(images, analyzeLocalFile, 8);
+}
+
+// Parcourt récursivement un dossier déposé (l'API standard du glisser-déposer
+// ne donne que le dossier, pas son contenu).
+async function collectDroppedFiles(dataTransfer) {
+  // Les entrées doivent être lues tout de suite : elles disparaissent après le premier "await"
+  const entries = Array.from(dataTransfer.items || [])
+    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+    .filter(Boolean);
+  if (!entries.length) return Array.from(dataTransfer.files);
+
+  const files = [];
+  async function walk(entry, path) {
+    if (entry.isFile) {
+      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      file.relPath = path + file.name;
+      files.push(file);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      // readEntries renvoie les éléments par paquets : on répète jusqu'à épuisement
+      do {
+        batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        for (const child of batch) await walk(child, path + entry.name + '/');
+      } while (batch.length);
+    }
+  }
+  for (const entry of entries) await walk(entry, '');
+  return files;
+}
+
+pickFolderBtn.addEventListener('click', () => folderInput.click());
+pickFilesBtn.addEventListener('click', () => fileInput.click());
+
+folderInput.addEventListener('change', (e) => {
+  analyzeFiles(Array.from(e.target.files));
+  e.target.value = ''; // permet de re-sélectionner le même dossier
+});
+
+fileInput.addEventListener('change', (e) => {
+  analyzeFiles(Array.from(e.target.files));
+  e.target.value = '';
+});
 
 dropzone.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -737,13 +803,11 @@ dropzone.addEventListener('dragover', (e) => {
 
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 
-dropzone.addEventListener('drop', (e) => {
+dropzone.addEventListener('drop', async (e) => {
   e.preventDefault();
   dropzone.classList.remove('dragover');
-  handleLocalFiles(e.dataTransfer.files);
+  analyzeFiles(await collectDroppedFiles(e.dataTransfer));
 });
-
-fileInput.addEventListener('change', (e) => handleLocalFiles(e.target.files));
 
 // Focus initial pour être prêt à coller dès l'ouverture de la page
 urlInput.focus();
